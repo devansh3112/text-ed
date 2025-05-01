@@ -2,7 +2,7 @@ import { io } from 'socket.io-client';
 
 // In development, use localhost. In production, use the Render.com URL
 const SOCKET_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://your-app-name.onrender.com'  // You'll replace this with your actual Render.com URL
+  ? 'wss://text-ed-nmdl.onrender.com'  // Your Render.com WebSocket URL
   : 'http://localhost:3001';
 
 export const socket = io(SOCKET_URL);
