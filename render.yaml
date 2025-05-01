@@ -1,9 +1,13 @@
 services:
   - type: web
-    name: socket-io-server
+    name: text-ed-server
     env: node
+    region: ohio  # or choose your preferred region
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: node server.cjs
     envVars:
       - key: NODE_VERSION
-        value: 16.x 
+        value: 20.x
+      - key: NODE_ENV
+        value: production
+    plan: free 
