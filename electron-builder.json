@@ -1,0 +1,25 @@
+{
+  "appId": "com.collaborative.editor",
+  "productName": "Collaborative Text Editor",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*"
+  ],
+  "mac": {
+    "target": ["dmg"],
+    "category": "public.app-category.developer-tools",
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist"
+  },
+  "win": {
+    "target": ["nsis"],
+    "icon": "build/icon.ico"
+  },
+  "linux": {
+    "target": ["AppImage"],
+    "category": "Development"
+  }
+} 
