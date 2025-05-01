@@ -2,10 +2,23 @@ import { io } from 'socket.io-client';
 
 // In development, use localhost. In production, use the Render.com URL
 const SOCKET_URL = process.env.NODE_ENV === 'production' 
-  ? 'wss://text-ed-nmdl.onrender.com'  // Your Render.com WebSocket URL
+  ? 'https://text-ed-nmdl.onrender.com'  // Your Render.com URL (note: using https, not wss)
   : 'http://localhost:3001';
 
-export const socket = io(SOCKET_URL);
+export const socket = io(SOCKET_URL, {
+  transports: ['websocket'],
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+});
+
+socket.on('connect', () => {
+  console.log('Connected to Socket.IO server');
+});
+
+socket.on('connect_error', (error) => {
+  console.error('Socket.IO connection error:', error);
+});
 
 export const joinRoom = (roomId: string) => {
   socket.emit('join-room', roomId);
