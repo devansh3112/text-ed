@@ -2,24 +2,31 @@
   "appId": "com.collaborative.editor",
   "productName": "Collaborative Text Editor",
   "directories": {
-    "output": "release"
+    "output": "release",
+    "buildResources": "build"
   },
   "files": [
     "dist/**/*",
-    "electron/**/*"
+    "dist-electron/**/*",
+    "package.json"
   ],
-  "mac": {
-    "target": ["dmg"],
-    "category": "public.app-category.developer-tools",
-    "entitlements": "build/entitlements.mac.plist",
-    "entitlementsInherit": "build/entitlements.mac.plist"
+  "extraMetadata": {
+    "main": "dist-electron/main.js"
   },
+  "asar": true,
   "win": {
-    "target": ["nsis"],
+    "target": ["portable", "nsis"],
     "icon": "build/icon.ico"
   },
+  "mac": {
+    "target": ["dmg", "zip"],
+    "icon": "build/icon.icns"
+  },
   "linux": {
-    "target": ["AppImage"],
-    "category": "Development"
+    "target": ["AppImage", "deb"],
+    "icon": "build/icon.png"
+  },
+  "portable": {
+    "artifactName": "CollaborativeEditor.exe"
   }
 } 

@@ -1,19 +1,29 @@
 import { BrowserWindow as ElectronBrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { app, BrowserWindow, screen, shell, ipcMain, globalShortcut } from 'electron'
 import path from 'path'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
 import fs from 'fs/promises'
 import net from 'net'
 import fsSync from 'fs'
+import { IntegratedServer } from './server'
 
 // Constants
 const isDev = process.env.NODE_ENV === 'development'
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+
+// The built directory structure
+//
+// ├─┬─┬ dist
+// │ │ └── index.html
+// │ │
+// │ ├─┬ dist-electron
+// │ │ ├── main.js
+// │ │ └── preload.js
+// │
+process.env.DIST = path.join(__dirname, '../dist')
+process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, '../public')
 
 // Application State
-let mainWindow: ElectronBrowserWindow | null = null
+let mainWindow: BrowserWindow | null = null
+let server: IntegratedServer | null = null
 const state = {
   isWindowVisible: false,
   windowPosition: null as { x: number; y: number } | null,
@@ -96,30 +106,30 @@ async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    minWidth: 750,
-    minHeight: 550,
+    minWidth: 400,
+    minHeight: 300,
     x: 0,
     y: 50,
     alwaysOnTop: true,
+    movable: true,
+    resizable: true,
     webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, isDev ? '../electron/preload.js' : 'preload.js')
+      nodeIntegration: true,
+      contextIsolation: false,
     },
     show: false,
     frame: false,
     transparent: true,
+    backgroundColor: '#23272a', // visible dark background
     fullscreenable: false,
     hasShadow: false,
     opacity: 1.0,
-    backgroundColor: '#00000000',
     focusable: true,
     skipTaskbar: true,
     type: 'panel',
     paintWhenInitiallyHidden: true,
     titleBarStyle: 'hidden',
     enableLargerThanScreen: true,
-    movable: true,
   })
 
   if (!mainWindow) {
@@ -181,6 +191,70 @@ async function createWindow(): Promise<void> {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+
+  // Test active push message to Renderer-process.
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow?.webContents.send('main-process-message', (new Date).toLocaleString())
+  })
+
+  // Register keyboard shortcuts
+  globalShortcut.register('CommandOrControl+B', () => {
+    if (mainWindow?.isVisible()) {
+      mainWindow.hide()
+    } else {
+      mainWindow?.show()
+    }
+  })
+
+  // Arrow key movement
+  globalShortcut.register('CommandOrControl+Left', () => {
+    if (!mainWindow) return
+    const bounds = mainWindow.getBounds()
+    mainWindow.setPosition(bounds.x - state.step, bounds.y)
+  })
+
+  globalShortcut.register('CommandOrControl+Right', () => {
+    if (!mainWindow) return
+    const bounds = mainWindow.getBounds()
+    mainWindow.setPosition(bounds.x + state.step, bounds.y)
+  })
+
+  globalShortcut.register('CommandOrControl+Up', () => {
+    if (!mainWindow) return
+    const bounds = mainWindow.getBounds()
+    mainWindow.setPosition(bounds.x, bounds.y - state.step)
+  })
+
+  globalShortcut.register('CommandOrControl+Down', () => {
+    if (!mainWindow) return
+    const bounds = mainWindow.getBounds()
+    mainWindow.setPosition(bounds.x, bounds.y + state.step)
+  })
+
+  // Quit application
+  globalShortcut.register('CommandOrControl+Q', () => {
+    app.quit()
+  })
+
+  // Window controls
+  ipcMain.on('minimize-window', () => {
+    mainWindow?.minimize()
+  })
+
+  ipcMain.on('maximize-window', () => {
+    if (mainWindow?.isMaximized()) {
+      mainWindow.unmaximize()
+    } else {
+      mainWindow?.maximize()
+    }
+  })
+
+  ipcMain.on('close-window', () => {
+    mainWindow?.close()
+  })
+
+  // Make window draggable from any empty space
+  mainWindow.setMovable(true)
 }
 
 // Handle file operations
@@ -255,9 +329,8 @@ function hideMainWindow(): void {
   state.windowPosition = { x: bounds.x, y: bounds.y }
   state.windowSize = { width: bounds.width, height: bounds.height }
   mainWindow!.setIgnoreMouseEvents(true, { forward: true })
-  mainWindow!.setOpacity(0)
   state.isWindowVisible = false
-  console.log('Window hidden, opacity set to 0')
+  console.log('Window hidden')
 }
 
 function showMainWindow(): void {
@@ -275,11 +348,9 @@ function showMainWindow(): void {
     visibleOnFullScreen: true
   })
   mainWindow!.setContentProtection(true)
-  mainWindow!.setOpacity(0) // Set opacity to 0 before showing
-  mainWindow!.showInactive() // Use showInactive instead of show+focus
-  mainWindow!.setOpacity(1) // Then set opacity to 1 after showing
+  mainWindow!.showInactive()
   state.isWindowVisible = true
-  console.log('Window shown with showInactive(), opacity set to 1')
+  console.log('Window shown with showInactive()')
 }
 
 function toggleMainWindow(): void {
@@ -324,67 +395,46 @@ function moveWindowVertical(updateFn: (y: number) => number): void {
   }
 }
 
-// Add keyboard shortcuts
-function registerGlobalShortcuts(): void {
-  // Toggle window visibility
-  globalShortcut.register('CommandOrControl+B', () => {
-    toggleMainWindow()
-  })
-
-  // Window movement
-  globalShortcut.register('CommandOrControl+Left', () => {
-    moveWindowHorizontal((x) => Math.max(-(state.windowSize?.width || 0) / 2, x - state.step))
-  })
-
-  globalShortcut.register('CommandOrControl+Right', () => {
-    moveWindowHorizontal((x) => Math.min(state.screenWidth - (state.windowSize?.width || 0) / 2, x + state.step))
-  })
-
-  globalShortcut.register('CommandOrControl+Up', () => {
-    moveWindowVertical((y) => y - state.step)
-  })
-
-  globalShortcut.register('CommandOrControl+Down', () => {
-    moveWindowVertical((y) => y + state.step)
-  })
-
-  // Opacity control
-  globalShortcut.register('CommandOrControl+[', () => {
-    if (mainWindow && state.isWindowVisible) {
-      const currentOpacity = mainWindow.getOpacity()
-      mainWindow.setOpacity(Math.max(0.1, currentOpacity - 0.1))
-    }
-  })
-
-  globalShortcut.register('CommandOrControl+]', () => {
-    if (mainWindow && state.isWindowVisible) {
-      const currentOpacity = mainWindow.getOpacity()
-      mainWindow.setOpacity(Math.min(1.0, currentOpacity + 0.1))
-    }
-  })
-}
-
 // Initialize application
 async function initializeApp() {
   try {
+    // Start the integrated server
+    const port = await findAvailablePort(3000)
+    server = new IntegratedServer(port)
+    await server.start()
+    
+    // Set the server port in the environment for the renderer process
+    process.env.VITE_SERVER_PORT = port.toString()
+    
     await createWindow()
-    registerGlobalShortcuts() // Register shortcuts after window creation
   } catch (error) {
     console.error('Failed to initialize app:', error)
+    app.quit()
   }
 }
 
-// App lifecycle handlers
-app.whenReady().then(initializeApp)
-
+// Quit when all windows are closed
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    if (server) {
+      server.stop()
+    }
     app.quit()
   }
 })
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow()
+    initializeApp()
   }
+})
+
+app.whenReady().then(initializeApp)
+
+// Clean up on quit
+app.on('before-quit', () => {
+  if (server) {
+    server.stop()
+  }
+  globalShortcut.unregisterAll()
 }) 
